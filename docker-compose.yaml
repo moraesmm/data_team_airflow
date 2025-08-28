@@ -89,6 +89,34 @@ services:
       retries: 50
     restart: always
 
+  # Banco Oracle para as DAGs
+  oracle-db:
+    image: gvenzl/oracle-free:latest
+    environment:
+      ORACLE_PASSWORD: oracle
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-db-volume:/opt/oracle/oradata
+      # init: roda 1x na criação do banco (pode ficar vazio)
+      - ./infra_script/oracle_db/init-oracle.sql:/container-entrypoint-initdb.d/01-init-oracle.sql:ro
+      # start: roda a cada start; idempotente (garante ORCL_USER)
+      - ./infra_script/oracle_db/ensure-orcl-user.sql:/container-entrypoint-startdb.d/10-ensure-orcl-user.sql:ro
+    restart: always
+
+  # Postgres externo para as DAGs
+  postgres-db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ptg_usr
+      POSTGRES_PASSWORD: ptg_pwd
+      POSTGRES_DB: data_team
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-ext-volume:/var/lib/postgresql/data
+    restart: always
+
   airflow-webserver:
     <<: *airflow-common
     command: webserver
@@ -135,3 +163,5 @@ services:
 
 volumes:
   postgres-db-volume:
+  oracle-db-volume:
+  postgres-ext-volume:
