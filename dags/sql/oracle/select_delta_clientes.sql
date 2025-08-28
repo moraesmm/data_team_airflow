@@ -1,0 +1,15 @@
+/* Lê o delta de clientes no Oracle.
+   Ajuste o nome da tabela/colunas conforme o seu esquema.
+   Esperado:
+     - CLIENTE_ACOMP(ID_CLIENTE NUMBER, STATUS VARCHAR2(100),SUBSTATUS VARCHAR2(100),OBS VARCHAR2(100), ATUALIZADO_EM TIMESTAMP)
+*/
+
+SELECT
+    ID_CLIENTE,
+    STATUS,
+    SUBSTATUS,
+    OBS,
+    ATUALIZADO_EM
+FROM CLIENTE_ACOMP
+WHERE ATUALIZADO_EM > :last_ts
+ORDER BY ATUALIZADO_EM ASC
