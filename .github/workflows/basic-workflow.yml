@@ -37,7 +37,7 @@ jobs:
   # This workflow contains a single job called "greet"
   greet:
     # Display name for the job
-    name: "Greetings, Program!"
+    name: "Programa de Saudacao!"
 
     # The type of runner that the job will run on, in this case a Linus hosted runner
     runs-on:
