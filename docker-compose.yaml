@@ -35,13 +35,15 @@
 #                              Default: airflow
 #
 # Feel free to modify this file to suit your needs.
----
-version: '3'
-x-airflow-common:
-  &airflow-common
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.0.2}
-  environment:
-    &airflow-common-env
+
+
+x-airflow-common: &airflow-common
+  build:
+    context: .           # pasta onde está o Dockerfile
+    dockerfile: Dockerfile
+  image: my-airflow:2.0.2-py38-oracle
+  env_file: .env
+  environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
@@ -81,7 +83,7 @@ services:
   redis:
     image: redis:latest
     ports:
-      - 6379:6379
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -121,7 +123,7 @@ services:
     <<: *airflow-common
     command: webserver
     ports:
-      - 8080:8080
+      - "8080:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 10s
@@ -141,19 +143,20 @@ services:
 
   airflow-init:
     <<: *airflow-common
-    command: version
-    environment:
-      <<: *airflow-common-env
-      _AIRFLOW_DB_UPGRADE: 'true'
-      _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
-      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+    entrypoint: /bin/bash
+    command: >
+      -c "airflow db upgrade &&
+          airflow users create --username ${_AIRFLOW_WWW_USER_USERNAME} --password ${_AIRFLOW_WWW_USER_PASSWORD} --firstname Admin --lastname User --role Admin --email admin@example.com || true &&
+          airflow connections delete postgres_default >/dev/null 2>&1 || true &&
+          airflow connections add 'postgres_default' --conn-uri \"${AIRFLOW_CONN_POSTGRES_DEFAULT}\" &&
+          airflow connections delete oracle_default >/dev/null 2>&1 || true &&
+          airflow connections add 'oracle_default' --conn-type oracle --conn-host ${ORACLE_HOST} --conn-port ${ORACLE_PORT} --conn-login ${ORACLE_APP_USER} --conn-password ${ORACLE_APP_PASSWORD} --conn-extra '{\"service_name\":\"'${ORACLE_SERVICE_NAME}'\"}'"
 
   flower:
     <<: *airflow-common
     command: celery flower
     ports:
-      - 5555:5555
+      - "5555:5555"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
       interval: 10s
