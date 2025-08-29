@@ -101,9 +101,9 @@ services:
     volumes:
       - oracle-db-volume:/opt/oracle/oradata
       # init: roda 1x na criação do banco (pode ficar vazio)
-      - ./infra_script/oracle_db/init-oracle.sql:/container-entrypoint-initdb.d/01-init-oracle.sql:ro
+      - ./dags/sql/oracle/init-oracle.sql:/container-entrypoint-initdb.d/01-init-oracle.sql:ro
       # start: roda a cada start; idempotente (garante ORCL_USER)
-      - ./infra_script/oracle_db/ensure-orcl-user.sql:/container-entrypoint-startdb.d/10-ensure-orcl-user.sql:ro
+      - ./dags/sql/oracle/ensure-orcl-user.sql:/container-entrypoint-startdb.d/10-ensure-orcl-user.sql:ro
     restart: always
 
   # Postgres externo para as DAGs
