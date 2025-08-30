@@ -41,7 +41,7 @@ jobs:
         env:
           AIRFLOW__CORE__LOAD_EXAMPLES: "false"
         run: |
-          pytest -vv --maxfail=1 --junitxml=pytest-report.xml \
+          pytest -vv tests --maxfail=1 --junitxml=pytest-report.xml \
             --cov=dags --cov-report=term-missing
 
       - name: Upload pytest report
