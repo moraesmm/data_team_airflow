@@ -35,12 +35,38 @@ jobs:
           CONSTRAINT_URL: https://raw.githubusercontent.com/apache/airflow/constraints-2.0.2/constraints-3.8.txt
         run: |
           python -m pip install --upgrade pip
-          pip install --constraint ${CONSTRAINT_URL} "apache-airflow==2.0.2" pytest
+          pip install --constraint ${CONSTRAINT_URL} "apache-airflow==2.0.2" pytest pytest-cov
 
-      - name: Run pytest
+      - name: Run pytest (verbose + junit)
         env:
           AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-        run: pytest -q
+        run: |
+          pytest -vv --maxfail=1 --junitxml=pytest-report.xml \
+            --cov=dags --cov-report=term-missing
+
+      - name: Upload pytest report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: pytest-report.xml
+
+      - name: Summary (unit tests)
+        run: |
+          python - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          t = ET.parse('pytest-report.xml').getroot()
+          total = int(t.attrib.get('tests', '0'))
+          failures = int(t.attrib.get('failures', '0'))
+          errors = int(t.attrib.get('errors', '0'))
+          skipped = int(t.attrib.get('skipped', '0'))
+          passed = total - failures - errors - skipped
+          print("## Unit tests")
+          print(f"- Total: {total}")
+          print(f"- Passed: {passed}")
+          print(f"- Failures: {failures}")
+          print(f"- Errors: {errors}")
+          print(f"- Skipped: {skipped}")
+          PY
 
   docker-build:
     name: Build da imagem e smoke test
@@ -58,7 +84,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: false
-          load: true
+          load: true              # importante para o docker run funcionar depois
           tags: my-airflow:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -69,14 +95,27 @@ jobs:
             -e AIRFLOW__CORE__LOAD_EXAMPLES=false \
             -v "$PWD/dags:/opt/airflow/dags" \
             my-airflow:ci \
-            python - <<'PY'
+            python - <<'PY' | tee smoke.txt
           from airflow.models import DagBag
           b = DagBag(dag_folder="/opt/airflow/dags", include_examples=False)
           print("DAGs:", len(b.dags))
+          for dag_id in sorted(b.dags):
+              print(" -", dag_id)
           if b.import_errors:
               print("Import errors:", b.import_errors)
               raise SystemExit(1)
           PY
+
+      - name: Summary (docker build + smoke)
+        run: |
+          {
+            echo "## Docker image & smoke"
+            echo ""
+            echo "**Imagem:** \`my-airflow:ci\`"
+            echo ""
+            echo "### Resultado do smoke"
+            sed -n '1,80p' smoke.txt
+          } >> "$GITHUB_STEP_SUMMARY"
 
   compose-validate:
     name: Validar docker-compose.yaml
@@ -84,5 +123,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: docker compose config
-        run: docker compose -f docker-compose.yaml config
+        run: docker compose -f docker-compose.yaml config > compose.out
+
+      - name: Summary (compose)
+        run: |
+          echo "## docker-compose.yaml" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Validação: **OK** (arquivo renderizou com \`docker compose config\`)." >> "$GITHUB_STEP_SUMMARY"
