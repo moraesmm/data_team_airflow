@@ -1,0 +1,87 @@
+name: CI - Airflow
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Unit tests (parse DAGs com Airflow 2.0.2)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.8
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}-py38-airflow-2.0.2
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Airflow + pytest (com constraints)
+        env:
+          CONSTRAINT_URL: https://raw.githubusercontent.com/apache/airflow/constraints-2.0.2/constraints-3.8.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install --constraint ${CONSTRAINT_URL} "apache-airflow==2.0.2" pytest
+
+      - name: Run pytest
+        env:
+          AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+        run: pytest -q
+
+  docker-build:
+    name: Build da imagem e smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Airflow image (sem push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: my-airflow:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test - parse DAGs dentro da imagem
+        run: |
+          docker run --rm \
+            -e AIRFLOW__CORE__LOAD_EXAMPLES=false \
+            -v "$PWD/dags:/opt/airflow/dags" \
+            my-airflow:ci \
+            python - <<'PY'
+          from airflow.models import DagBag
+          b = DagBag(dag_folder="/opt/airflow/dags", include_examples=False)
+          print("DAGs:", len(b.dags))
+          if b.import_errors:
+              print("Import errors:", b.import_errors)
+              raise SystemExit(1)
+          PY
+
+  compose-validate:
+    name: Validar docker-compose.yaml
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: docker compose config
+        run: docker compose -f docker-compose.yaml config
